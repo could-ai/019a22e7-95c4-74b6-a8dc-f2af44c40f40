@@ -36,7 +36,10 @@ class MyApp extends StatelessWidget {
         routes: {
           '/': (context) => const HomeScreen(),
           '/menu': (context) => const MenuScreen(),
-          '/registro': (context) => const RegistroScreen(hashPrecompletado: null),
+          '/registro': (context) {
+            final args = ModalRoute.of(context)?.settings.arguments as Map<String, dynamic>?;
+            return RegistroScreen(hashPrecompletado: args?['hashPrecompletado']);
+          },
           '/escanear': (context) => const EscanearScreen(),
           '/ver-escaneos': (context) => const VerEscaneosScreen(),
           '/configuracion': (context) => const ConfiguracionScreen(),

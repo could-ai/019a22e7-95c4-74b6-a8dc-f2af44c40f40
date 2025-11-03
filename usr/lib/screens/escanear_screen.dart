@@ -12,55 +12,59 @@ class EscanearScreen extends StatefulWidget {
 }
 
 class _EscanearScreenState extends State<EscanearScreen> {
-  MobileScannerController controller = MobileScannerController(
-    formats: [BarcodeFormat.qrCode],  // Solo QR
+  final MobileScannerController _controller = MobileScannerController(
+    formats: [BarcodeFormat.qrCode],
     detectionSpeed: DetectionSpeed.normal,
   );
-  bool _isActive = false;
-  int _intentos = 0;
+  bool _isProcessing = false;
 
   @override
   void initState() {
     super.initState();
-    controller.start();  // Inicia cámara con permisos automáticos
-    setState(() => _isActive = true);
+    _controller.start();
   }
 
   void _onDetect(BarcodeCapture capture) {
-    final List<Barcode> barcodes = capture.barcodes;
-    for (final barcode in barcodes) {
-      final String code = barcode.rawValue ?? '';
-      debugPrint('Escaneado: $code');  // Log para depuración
-      setState(() => _intentos++);
-      _procesarEscaneo(code);
+    if (_isProcessing) return;
+
+    final barcode = capture.barcodes.firstOrNull;
+    if (barcode != null && barcode.rawValue != null) {
+      setState(() {
+        _isProcessing = true;
+      });
+      debugPrint('Código QR detectado: ${barcode.rawValue}');
+      _procesarEscaneo(barcode.rawValue!);
     }
   }
 
   void _procesarEscaneo(String hash) {
-    final provider = Provider.of<AdultoMayorProvider>(context, listen: false);
-    final adulto = provider.buscarPorHash(hash);
+    // Pausa el scanner para evitar múltiples detecciones
+    _controller.stop();
+
+    final adultoProvider = Provider.of<AdultoMayorProvider>(context, listen: false);
+    final adulto = adultoProvider.buscarPorHash(hash);
+
     if (adulto != null) {
-      // Hash encontrado: Mostrar validación y guardar escaneo simulado
-      showDialog(
-        context: context,
-        builder: (_) => AlertDialog(
-          title: const Text('Validación Exitosa'),
-          content: Text('Hash encontrado: ${adulto.nombres}, Cédula: ${adulto.cedula}, Edad: ${adulto.edad}'),
-          actions: [
-            TextButton(onPressed: () => Navigator.pop(context), child: const Text('OK')),
-          ],
-        ),
-      );
+      // Hash encontrado: guardar escaneo y navegar a la lista de escaneos
       final escaneoProvider = Provider.of<EscaneoProvider>(context, listen: false);
       escaneoProvider.agregarEscaneo(Escaneo(
         hash: hash,
         timestamp: DateTime.now(),
-        adultoMayorId: adulto.hashIdentificador,  // Simula ID
+        adultoMayorId: adulto.hashIdentificador,
       ));
-      // Placeholder: Guardar en BD via API
+      
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Éxito: ${adulto.nombres} encontrado.'), backgroundColor: Colors.green),
+      );
+
+      // Navega a la pantalla de escaneos y elimina la actual del stack
+      Navigator.popAndPushNamed(context, '/ver-escaneos');
     } else {
-      // Hash no encontrado: Abrir registro con hash pre-completado
-      Navigator.pushNamed(context, '/registro', arguments: {'hashPrecompletado': hash});
+      // Hash no encontrado: abrir registro con el hash pre-completado
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Hash no registrado. Por favor, complete el registro.'), backgroundColor: Colors.orange),
+      );
+      Navigator.popAndPushNamed(context, '/registro', arguments: {'hashPrecompletado': hash});
     }
   }
 
@@ -76,31 +80,51 @@ class _EscanearScreenState extends State<EscanearScreen> {
         ),
         actions: [
           IconButton(
-            icon: Icon(_isActive ? Icons.flash_on : Icons.flash_off),
-            onPressed: () => controller.toggleTorch(),
+            icon: ValueListenableBuilder(
+              valueListenable: _controller.torchState,
+              builder: (context, state, child) {
+                switch (state) {
+                  case TorchState.off:
+                    return const Icon(Icons.flash_off, color: Colors.white);
+                  case TorchState.on:
+                    return const Icon(Icons.flash_on, color: Colors.yellow);
+                }
+              },
+            ),
+            onPressed: () => _controller.toggleTorch(),
           ),
         ],
       ),
       body: Stack(
         children: [
           MobileScanner(
-            controller: controller,
+            controller: _controller,
             onDetect: _onDetect,
-          ),
-          Center(
-            child: Container(
-              width: 250,
-              height: 250,
+            overlay: Container(
               decoration: BoxDecoration(
-                border: Border.all(color: Colors.red, width: 2),
-                borderRadius: BorderRadius.circular(10),
+                border: Border.all(color: Colors.red, width: 4),
+                borderRadius: BorderRadius.circular(12),
               ),
             ),
           ),
-          Positioned(
-            bottom: 20,
-            left: 20,
-            child: Text('Activo: $_isActive, Intentos: $_intentos', style: const TextStyle(color: Colors.white)),
+          Center(
+            child: Container(
+              width: 280,
+              height: 280,
+              decoration: BoxDecoration(
+                border: Border.all(color: Colors.white.withOpacity(0.7), width: 2),
+                borderRadius: BorderRadius.circular(10),
+              ),
+              child: const Center(
+                  child: Text(
+                'Apunte al código QR',
+                style: TextStyle(
+                  color: Colors.white,
+                  backgroundColor: Colors.black54,
+                  fontWeight: FontWeight.bold,
+                ),
+              )),
+            ),
           ),
         ],
       ),
@@ -109,7 +133,7 @@ class _EscanearScreenState extends State<EscanearScreen> {
 
   @override
   void dispose() {
-    controller.dispose();
+    _controller.dispose();
     super.dispose();
   }
 }
