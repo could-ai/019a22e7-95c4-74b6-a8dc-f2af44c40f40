@@ -94,7 +94,17 @@ class _RegistroScreenState extends State<RegistroScreen> {
                 controller: _cedulaController,
                 decoration: const InputDecoration(labelText: 'Cédula'),
                 keyboardType: TextInputType.number,
-                validator: (v) => v!.length < 7 || !RegExp(r'^\\+d+$').hasMatch(v) ? 'Solo números, min 7 dígitos' : null,
+                validator: (v) {
+                  if (v == null || v.isEmpty) {
+                    return 'Requerido';
+                  }
+                  // La expresión regular anterior era incorrecta.
+                  // Esta valida que solo contenga números y tenga al menos 7 dígitos.
+                  if (v.length < 7 || !RegExp(r'^\d+$').hasMatch(v)) {
+                    return 'Solo números, mínimo 7 dígitos';
+                  }
+                  return null;
+                },
               ),
               TextFormField(
                 controller: _fechaController,
