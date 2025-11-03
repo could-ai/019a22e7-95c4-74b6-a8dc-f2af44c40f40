@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:image_picker/image_picker.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
 import 'package:provider/provider.dart';
 import '../main.dart';
@@ -21,7 +22,6 @@ class _EscanearScreenState extends State<EscanearScreen> {
   @override
   void initState() {
     super.initState();
-    _controller.start();
   }
 
   void _onDetect(BarcodeCapture capture) {
@@ -38,9 +38,6 @@ class _EscanearScreenState extends State<EscanearScreen> {
   }
 
   void _procesarEscaneo(String hash) {
-    // Pausa el scanner para evitar múltiples detecciones
-    _controller.stop();
-
     final adultoProvider = Provider.of<AdultoMayorProvider>(context, listen: false);
     final adulto = adultoProvider.buscarPorHash(hash);
 
@@ -53,6 +50,7 @@ class _EscanearScreenState extends State<EscanearScreen> {
         adultoMayorId: adulto.hashIdentificador,
       ));
       
+      if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('Éxito: ${adulto.nombres} encontrado.'), backgroundColor: Colors.green),
       );
@@ -61,10 +59,27 @@ class _EscanearScreenState extends State<EscanearScreen> {
       Navigator.popAndPushNamed(context, '/ver-escaneos');
     } else {
       // Hash no encontrado: abrir registro con el hash pre-completado
+      if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Hash no registrado. Por favor, complete el registro.'), backgroundColor: Colors.orange),
       );
       Navigator.popAndPushNamed(context, '/registro', arguments: {'hashPrecompletado': hash});
+    }
+  }
+
+  Future<void> _scanFromImage() async {
+    final picker = ImagePicker();
+    final XFile? image = await picker.pickImage(source: ImageSource.gallery);
+    if (image != null) {
+      if (!mounted) return;
+      final result = await _controller.analyzeImage(image.path);
+      if (!result) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('No se encontró código QR en la imagen.')),
+          );
+        }
+      }
     }
   }
 
@@ -80,6 +95,11 @@ class _EscanearScreenState extends State<EscanearScreen> {
         ),
         actions: [
           IconButton(
+            icon: const Icon(Icons.image, color: Colors.white),
+            onPressed: _scanFromImage,
+            tooltip: 'Escanear desde imagen',
+          ),
+          IconButton(
             icon: ValueListenableBuilder(
               valueListenable: _controller.torchState,
               builder: (context, state, child) {
@@ -88,6 +108,8 @@ class _EscanearScreenState extends State<EscanearScreen> {
                     return const Icon(Icons.flash_off, color: Colors.white);
                   case TorchState.on:
                     return const Icon(Icons.flash_on, color: Colors.yellow);
+                  default:
+                    return const Icon(Icons.flash_off, color: Colors.grey);
                 }
               },
             ),
@@ -100,12 +122,6 @@ class _EscanearScreenState extends State<EscanearScreen> {
           MobileScanner(
             controller: _controller,
             onDetect: _onDetect,
-            overlay: Container(
-              decoration: BoxDecoration(
-                border: Border.all(color: Colors.red, width: 4),
-                borderRadius: BorderRadius.circular(12),
-              ),
-            ),
           ),
           Center(
             child: Container(
