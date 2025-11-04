@@ -38,6 +38,9 @@ class _EscanearScreenState extends State<EscanearScreen> {
   }
 
   void _procesarEscaneo(String hash) {
+    // Detener la cámara mientras se procesa para evitar escaneos múltiples
+    _controller.stop();
+
     final adultoProvider = Provider.of<AdultoMayorProvider>(context, listen: false);
     final adulto = adultoProvider.buscarPorHash(hash);
 
@@ -72,8 +75,19 @@ class _EscanearScreenState extends State<EscanearScreen> {
     final XFile? image = await picker.pickImage(source: ImageSource.gallery);
     if (image != null) {
       if (!mounted) return;
-      final result = await _controller.analyzeImage(image.path);
-      if (!result) {
+      
+      // analyzeImage ahora devuelve un BarcodeCapture?, no un booleano.
+      final BarcodeCapture? capture = await _controller.analyzeImage(image.path);
+      final barcode = capture?.barcodes.firstOrNull;
+
+      if (barcode != null && barcode.rawValue != null) {
+        if (_isProcessing) return;
+        setState(() {
+          _isProcessing = true;
+        });
+        debugPrint('Código QR detectado desde imagen: ${barcode.rawValue}');
+        _procesarEscaneo(barcode.rawValue!);
+      } else {
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(content: Text('No se encontró código QR en la imagen.')),
@@ -100,16 +114,16 @@ class _EscanearScreenState extends State<EscanearScreen> {
             tooltip: 'Escanear desde imagen',
           ),
           IconButton(
-            icon: ValueListenableBuilder(
+            // Se especifica el tipo explícitamente para ayudar al analizador de Dart.
+            icon: ValueListenableBuilder<TorchState>(
               valueListenable: _controller.torchState,
               builder: (context, state, child) {
+                // El enum TorchState solo tiene 'on' y 'off', por lo que el switch es exhaustivo.
                 switch (state) {
                   case TorchState.off:
                     return const Icon(Icons.flash_off, color: Colors.white);
                   case TorchState.on:
                     return const Icon(Icons.flash_on, color: Colors.yellow);
-                  default:
-                    return const Icon(Icons.flash_off, color: Colors.grey);
                 }
               },
             ),
