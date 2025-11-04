@@ -114,16 +114,13 @@ class _EscanearScreenState extends State<EscanearScreen> {
             tooltip: 'Escanear desde imagen',
           ),
           IconButton(
-            // Se especifica el tipo explícitamente para ayudar al analizador de Dart.
-            icon: ValueListenableBuilder<TorchState>(
-              valueListenable: _controller.torchState,
+            icon: ValueListenableBuilder<bool>(
+              valueListenable: _controller.torchEnabled,
               builder: (context, state, child) {
-                // El enum TorchState solo tiene 'on' y 'off', por lo que el switch es exhaustivo.
-                switch (state) {
-                  case TorchState.off:
-                    return const Icon(Icons.flash_off, color: Colors.white);
-                  case TorchState.on:
-                    return const Icon(Icons.flash_on, color: Colors.yellow);
+                if (state) {
+                  return const Icon(Icons.flash_on, color: Colors.yellow);
+                } else {
+                  return const Icon(Icons.flash_off, color: Colors.white);
                 }
               },
             ),
