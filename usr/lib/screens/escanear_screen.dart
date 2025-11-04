@@ -18,6 +18,7 @@ class _EscanearScreenState extends State<EscanearScreen> {
     detectionSpeed: DetectionSpeed.normal,
   );
   bool _isProcessing = false;
+  bool _isTorchOn = false;
 
   @override
   void initState() {
@@ -27,7 +28,7 @@ class _EscanearScreenState extends State<EscanearScreen> {
   void _onDetect(BarcodeCapture capture) {
     if (_isProcessing) return;
 
-    final barcode = capture.barcodes.firstOrNull;
+    final barcode = capture.barcodes.isNotEmpty ? capture.barcodes.first : null;
     if (barcode != null && barcode.rawValue != null) {
       setState(() {
         _isProcessing = true;
@@ -37,31 +38,26 @@ class _EscanearScreenState extends State<EscanearScreen> {
     }
   }
 
-  void _procesarEscaneo(String hash) {
-    // Detener la cámara mientras se procesa para evitar escaneos múltiples
-    _controller.stop();
+  void _procesarEscaneo(String hash) async {
+    await _controller.stop();
 
     final adultoProvider = Provider.of<AdultoMayorProvider>(context, listen: false);
     final adulto = adultoProvider.buscarPorHash(hash);
 
     if (adulto != null) {
-      // Hash encontrado: guardar escaneo y navegar a la lista de escaneos
       final escaneoProvider = Provider.of<EscaneoProvider>(context, listen: false);
       escaneoProvider.agregarEscaneo(Escaneo(
         hash: hash,
         timestamp: DateTime.now(),
         adultoMayorId: adulto.hashIdentificador,
       ));
-      
+
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('Éxito: ${adulto.nombres} encontrado.'), backgroundColor: Colors.green),
       );
-
-      // Navega a la pantalla de escaneos y elimina la actual del stack
       Navigator.popAndPushNamed(context, '/ver-escaneos');
     } else {
-      // Hash no encontrado: abrir registro con el hash pre-completado
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Hash no registrado. Por favor, complete el registro.'), backgroundColor: Colors.orange),
@@ -75,10 +71,9 @@ class _EscanearScreenState extends State<EscanearScreen> {
     final XFile? image = await picker.pickImage(source: ImageSource.gallery);
     if (image != null) {
       if (!mounted) return;
-      
-      // analyzeImage ahora devuelve un BarcodeCapture?, no un booleano.
+
       final BarcodeCapture? capture = await _controller.analyzeImage(image.path);
-      final barcode = capture?.barcodes.firstOrNull;
+      final barcode = (capture != null && capture.barcodes.isNotEmpty) ? capture.barcodes.first : null;
 
       if (barcode != null && barcode.rawValue != null) {
         if (_isProcessing) return;
@@ -114,17 +109,16 @@ class _EscanearScreenState extends State<EscanearScreen> {
             tooltip: 'Escanear desde imagen',
           ),
           IconButton(
-            icon: ValueListenableBuilder<bool>(
-              valueListenable: _controller.torchEnabled,
-              builder: (context, state, child) {
-                if (state) {
-                  return const Icon(Icons.flash_on, color: Colors.yellow);
-                } else {
-                  return const Icon(Icons.flash_off, color: Colors.white);
-                }
-              },
+            icon: Icon(
+              _isTorchOn ? Icons.flash_on : Icons.flash_off,
+              color: _isTorchOn ? Colors.yellow : Colors.white,
             ),
-            onPressed: () => _controller.toggleTorch(),
+            onPressed: () {
+              _controller.toggleTorch();
+              setState(() {
+                _isTorchOn = !_isTorchOn;
+              });
+            },
           ),
         ],
       ),
@@ -143,14 +137,15 @@ class _EscanearScreenState extends State<EscanearScreen> {
                 borderRadius: BorderRadius.circular(10),
               ),
               child: const Center(
-                  child: Text(
-                'Apunte al código QR',
-                style: TextStyle(
-                  color: Colors.white,
-                  backgroundColor: Colors.black54,
-                  fontWeight: FontWeight.bold,
+                child: Text(
+                  'Apunte al código QR',
+                  style: TextStyle(
+                    color: Colors.white,
+                    backgroundColor: Colors.black54,
+                    fontWeight: FontWeight.bold,
+                  ),
                 ),
-              )),
+              ),
             ),
           ),
         ],
